@@ -1,0 +1,10 @@
+[package]
+name = "obsidian-cli"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.93"
+chrono = "0.4.38"
+clap = "4.5.20"
+ulid = "1.1.3"
+uuid = { version = "1.11.0", features = ["v7"] }
