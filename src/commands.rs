@@ -1,16 +1,16 @@
 use clap::{ArgMatches, Command};
 
-mod new;
+mod init;
 
 pub fn cli() -> Vec<Command> {
-    vec![new::cli()]
+    vec![init::cli()]
 }
 
 type Exec = fn(&ArgMatches) -> anyhow::Result<()>;
 
 pub fn infer(cmd: &str) -> Option<Exec> {
     match cmd {
-        "new" => Some(new::exec),
+        "init" => Some(init::exec),
         _ => None,
     }
 }
