@@ -42,10 +42,13 @@ pub fn exec(args: &clap::ArgMatches) -> Result<()> {
         args.get_flag("note"),
     )?;
 
-    match opts.kind {
+    let new_path = match opts.kind {
         EntryKind::Diary => diary_entry(&opts),
         EntryKind::Note => note_entry(&opts),
-    }
+    }?;
+
+    println!("{}", new_path.display());
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -87,7 +90,7 @@ impl EntryOptions {
     }
 }
 
-fn diary_entry(opts: &EntryOptions) -> Result<()> {
+fn diary_entry(opts: &EntryOptions) -> Result<PathBuf> {
     let pattern = Regex::new(r"^\d{6}\.md$")?;
     let latest = fs::read_dir(&opts.cwd)?
         .filter_map(|entry| {
@@ -124,7 +127,7 @@ fn diary_entry(opts: &EntryOptions) -> Result<()> {
     let new_path = opts.cwd.join(format!("{:04}{:02}.md", y, m));
     fs::rename(&opts.path, &new_path)?;
 
-    let file = File::create(new_path)?;
+    let file = File::create(&new_path)?;
     let metadata = file.metadata()?;
     let created: DateTime<Local> = metadata.created()?.into();
     let modified: DateTime<Local> = metadata.modified()?.into();
@@ -158,17 +161,17 @@ updated_at: {}
     }
 
     buf.flush()?;
-    Ok(())
+    Ok(new_path)
 }
 
-fn note_entry(opts: &EntryOptions) -> Result<()> {
+fn note_entry(opts: &EntryOptions) -> Result<PathBuf> {
     let created = opts.path.metadata()?.created()?;
     let id = ulid::Ulid::from_datetime(created);
 
     let new_path = opts.cwd.join(format!("{}.md", id));
     fs::rename(&opts.path, &new_path)?;
 
-    let file = File::create(new_path)?;
+    let file = File::create(&new_path)?;
     let metadata = file.metadata()?;
     let created: DateTime<Local> = metadata.created()?.into();
     let modified: DateTime<Local> = metadata.modified()?.into();
@@ -187,7 +190,7 @@ tags:
     ))?;
 
     buf.flush()?;
-    Ok(())
+    Ok(new_path)
 }
 
 fn ndays_in_month(year: i32, month: u32) -> u32 {
