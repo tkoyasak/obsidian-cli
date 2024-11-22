@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use chrono::{DateTime, Datelike, Local, Months, NaiveDate};
+use chrono::{DateTime, Datelike, Local, NaiveDate};
 use clap::{builder::ValueParser, Arg, ArgAction, Command};
 use regex::Regex;
 use std::fs::{self, File};
@@ -21,12 +21,10 @@ pub fn cli() -> Command {
             Arg::new("diary")
                 .long("diary")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all(["note"])
                 .help("Use a diary format"),
             Arg::new("note")
                 .long("note")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all(["diary"])
                 .help("Use a note format"),
         ])
 }
@@ -78,6 +76,7 @@ impl EntryOptions {
             bail!("{} is not empty", path.display());
         }
 
+        let path = path.canonicalize()?;
         let cwd = path.parent().unwrap_or(Path::new(".")).to_path_buf();
 
         let kind = match (diary, note) {
@@ -112,16 +111,19 @@ fn diary_entry(opts: &EntryOptions) -> Result<PathBuf> {
         .max();
 
     let today = Local::now().date_naive();
+    let tym = (today.year(), today.month());
     let (y, m) = match latest {
         Some(date) => {
-            if (date.year(), date.month()) < (today.year(), today.month()) {
-                (today.year(), today.month())
+            let (y, m) = (date.year(), date.month());
+            if (y, m) < tym {
+                tym
+            } else if m == 12 {
+                (y + 1, 1)
             } else {
-                let date = date + Months::new(1);
-                (date.year(), date.month())
+                (y, m + 1)
             }
         }
-        None => (today.year(), today.month()),
+        None => tym,
     };
 
     let new_path = opts.cwd.join(format!("{:04}{:02}.md", y, m));
@@ -139,8 +141,8 @@ created_at: {}
 updated_at: {}
 ---
 ",
-        created.format("%Y-%m-%dT%H:%M:%S%:z"),
-        modified.format("%Y-%m-%dT%H:%M:%S%:z"),
+        created.format("%Y-%m-%d"),
+        modified.format("%Y-%m-%d"),
     ))?;
 
     let mut w = NaiveDate::from_ymd_opt(y, m, 1).unwrap().weekday();
@@ -166,7 +168,7 @@ updated_at: {}
 
 fn note_entry(opts: &EntryOptions) -> Result<PathBuf> {
     let created = opts.path.metadata()?.created()?;
-    let id = ulid::Ulid::from_datetime(created);
+    let id = ulid::Ulid::from_datetime(created).to_string();
 
     let new_path = opts.cwd.join(format!("{}.md", id));
     fs::rename(&opts.path, &new_path)?;
@@ -181,12 +183,13 @@ fn note_entry(opts: &EntryOptions) -> Result<PathBuf> {
         "---
 created_at: {}
 updated_at: {}
-title:
+title: {}
 tags:
 ---
 ",
-        created.format("%Y-%m-%dT%H:%M:%S%:z"),
-        modified.format("%Y-%m-%dT%H:%M:%S%:z"),
+        created.format("%Y-%m-%d"),
+        modified.format("%Y-%m-%d"),
+        opts.path.file_stem().unwrap().to_string_lossy(),
     ))?;
 
     buf.flush()?;
